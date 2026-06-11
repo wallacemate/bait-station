@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>夏威夷除蟲達人 — 管理後台</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:sans-serif;background:#f0f4f8;color:#333}
+.header{background:#1F4E79;color:white;padding:20px 24px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:18px;font-weight:bold}
+.header p{font-size:12px;opacity:.7;margin-top:3px}
+.container{max-width:800px;margin:0 auto;padding:20px 16px}
+
+/* 新增地點區 */
+.add-section{background:white;border-radius:12px;border:1px solid #e0e0e0;padding:20px;margin-bottom:24px}
+.add-section h2{font-size:15px;font-weight:bold;color:#1F4E79;margin-bottom:14px}
+.add-row{display:flex;gap:10px;flex-wrap:wrap}
+.add-row input{flex:1;min-width:160px;padding:10px 14px;border:1px solid #ccc;border-radius:8px;font-size:14px;font-family:sans-serif}
+.add-row input:focus{outline:none;border-color:#1F4E79}
+.btn-add{background:#1F4E79;color:white;border:none;padding:10px 22px;border-radius:8px;font-size:14px;cursor:pointer;white-space:nowrap}
+.btn-add:hover{background:#163d61}
+.msg{font-size:13px;margin-top:10px;padding:8px 12px;border-radius:6px;display:none}
+.msg.ok{background:#e8f5e9;color:#2e7d32;display:block}
+.msg.err{background:#fdecea;color:#c62828;display:block}
+
+/* 地點卡片 */
+.locations-title{font-size:15px;font-weight:bold;color:#555;margin-bottom:12px}
+.location-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.loc-card{background:white;border-radius:12px;border:1px solid #e0e0e0;padding:16px;position:relative}
+.loc-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+.loc-name{font-size:14px;font-weight:bold;color:#1F4E79;line-height:1.4;flex:1;margin-right:8px}
+.station-count{font-size:12px;color:#888;margin-bottom:10px}
+.qr-wrap{display:flex;justify-content:center;margin:10px 0}
+.qr-wrap canvas, .qr-wrap img{border:1px solid #eee;border-radius:4px}
+.loc-url{font-size:10px;color:#aaa;word-break:break-all;text-align:center;margin-top:6px}
+.btn-del{background:none;border:1px solid #ffcdd2;color:#e57373;padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;margin-top:10px;width:100%}
+.btn-del:hover{background:#fdecea}
+.btn-print{background:#f5f5f5;border:1px solid #ddd;color:#555;padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;margin-top:6px;width:100%}
+.btn-print:hover{background:#eeeeee}
+.empty-state{text-align:center;padding:40px;color:#bbb;font-size:14px;grid-column:1/-1}
+.loading-state{text-align:center;padding:40px;color:#aaa;font-size:14px}
+
+/* 統計區 */
+.stats{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.stat-card{background:white;border-radius:10px;border:1px solid #e0e0e0;padding:12px 18px;flex:1;min-width:100px;text-align:center}
+.stat-card .num{font-size:24px;font-weight:bold;color:#1F4E79}
+.stat-card .lbl{font-size:12px;color:#888;margin-top:2px}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>🐀 夏威夷除蟲達人 — 管理後台</h1>
+    <p>餌站巡檢地點管理</p>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- 統計 -->
+  <div class="stats" id="stats">
+    <div class="stat-card"><div class="num" id="statLoc">-</div><div class="lbl">服務地點</div></div>
+    <div class="stat-card"><div class="num" id="statStation">-</div><div class="lbl">總餌站數</div></div>
+  </div>
+
+  <!-- 新增地點 -->
+  <div class="add-section">
+    <h2>＋ 新增服務地點</h2>
+    <div class="add-row">
+      <input type="text" id="newName" placeholder="地點名稱（例：某某大樓管委會）" maxlength="30">
+      <input type="number" id="newCount" placeholder="餌站數量" min="1" max="50" style="max-width:130px">
+      <button class="btn-add" onclick="addLocation()">新增</button>
+    </div>
+    <div class="msg" id="addMsg"></div>
+  </div>
+
+  <!-- 地點列表 -->
+  <div class="locations-title">目前服務地點</div>
+  <div class="location-grid" id="locGrid">
+    <div class="loading-state">載入中...</div>
+  </div>
+
+</div>
+
+<script>
+const APPS_SCRIPT_URL = "【填入你的Apps Script部署網址】";
+const BASE_URL = "【填入你的GitHub Pages網址，例如：https://wallacemate.github.io/bait-station】";
+
+let locations = [];
+
+function showMsg(text, type){
+  const el = document.getElementById("addMsg");
+  el.textContent = text;
+  el.className = "msg " + type;
+  setTimeout(()=>{ el.className="msg"; }, 3500);
+}
+
+function loadLocations(){
+  fetch(APPS_SCRIPT_URL+"?action=getLocations")
+    .then(r=>r.json())
+    .then(res=>{
+      if(!res.ok){ document.getElementById("locGrid").innerHTML='<div class="empty-state">載入失敗</div>'; return; }
+      locations = res.locations;
+      renderLocations();
+    })
+    .catch(()=>{ document.getElementById("locGrid").innerHTML='<div class="empty-state">無法連線</div>'; });
+}
+
+function renderLocations(){
+  const grid = document.getElementById("locGrid");
+  const totalStations = locations.reduce((s,l)=>s+l.stationCount,0);
+  document.getElementById("statLoc").textContent = locations.length;
+  document.getElementById("statStation").textContent = totalStations;
+
+  if(!locations.length){
+    grid.innerHTML='<div class="empty-state">尚未新增任何地點</div>';
+    return;
+  }
+
+  grid.innerHTML = locations.map((loc,i)=>`
+    <div class="loc-card" id="card-${i}">
+      <div class="loc-card-header">
+        <div class="loc-name">${loc.name}</div>
+      </div>
+      <div class="station-count">餌站數量：${loc.stationCount} 個</div>
+      <div class="qr-wrap" id="qr-${i}"></div>
+      <div class="loc-url">${BASE_URL}/?location=${encodeURIComponent(loc.code)}</div>
+      <button class="btn-print" onclick="printQR(${i})">列印 QR Code</button>
+      <button class="btn-del" onclick="deleteLocation('${loc.code}','${loc.name}')">刪除此地點</button>
+    </div>
+  `).join("");
+
+  // 產生每個 QR Code
+  locations.forEach((loc,i)=>{
+    const url = BASE_URL+"/?location="+encodeURIComponent(loc.code);
+    new QRCode(document.getElementById("qr-"+i),{
+      text: url,
+      width: 140,
+      height: 140,
+      colorDark: "#1F4E79",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  });
+}
+
+function addLocation(){
+  const name  = document.getElementById("newName").value.trim();
+  const count = parseInt(document.getElementById("newCount").value);
+
+  if(!name){ showMsg("請輸入地點名稱","err"); return; }
+  if(!count||count<1){ showMsg("請輸入正確的餌站數量","err"); return; }
+  if(locations.find(l=>l.name===name)){ showMsg("此地點名稱已存在","err"); return; }
+
+  fetch(APPS_SCRIPT_URL,{
+    method:"POST",
+    body: JSON.stringify({ action:"addLocation", name, stationCount:count })
+  })
+  .then(r=>r.json())
+  .then(res=>{
+    if(res.ok){
+      showMsg("✅ 已新增："+name,"ok");
+      document.getElementById("newName").value="";
+      document.getElementById("newCount").value="";
+      loadLocations();
+    } else {
+      showMsg("新增失敗："+res.msg,"err");
+    }
+  })
+  .catch(()=>showMsg("連線失敗，請稍後再試","err"));
+}
+
+function deleteLocation(code, name){
+  if(!confirm("確定要刪除「"+name+"」嗎？\n刪除後該地點的巡檢紀錄不會消失，但地點設定會移除。")) return;
+
+  fetch(APPS_SCRIPT_URL,{
+    method:"POST",
+    body: JSON.stringify({ action:"deleteLocation", code })
+  })
+  .then(r=>r.json())
+  .then(res=>{
+    if(res.ok){ loadLocations(); }
+    else { alert("刪除失敗："+res.msg); }
+  })
+  .catch(()=>alert("連線失敗"));
+}
+
+function printQR(i){
+  const loc = locations[i];
+  const url = BASE_URL+"/?location="+encodeURIComponent(loc.code);
+  const win = window.open("","_blank","width=400,height=500");
+  const qrDiv = document.getElementById("qr-"+i);
+  const imgSrc = qrDiv.querySelector("img") ? qrDiv.querySelector("img").src
+               : qrDiv.querySelector("canvas") ? qrDiv.querySelector("canvas").toDataURL() : "";
+  win.document.write(`
+    <html><head><title>QR Code - ${loc.name}</title>
+    <style>
+      body{font-family:sans-serif;text-align:center;padding:30px}
+      h2{font-size:16px;color:#1F4E79;margin-bottom:4px}
+      p{font-size:11px;color:#888;margin-bottom:20px}
+      img{width:180px;height:180px}
+      .url{font-size:10px;color:#aaa;margin-top:10px;word-break:break-all;max-width:220px;margin-left:auto;margin-right:auto}
+      .brand{font-size:12px;color:#555;margin-top:16px}
+    </style></head>
+    <body>
+      <h2>${loc.name}</h2>
+      <p>餌站巡檢紀錄查詢</p>
+      <img src="${imgSrc}">
+      <div class="url">${url}</div>
+      <div class="brand">夏威夷除蟲達人　0908-959-655</div>
+      <script>window.onload=()=>window.print()<\/script>
+    </body></html>
+  `);
+}
+
+// 初始載入
+loadLocations();
+</script>
+</body>
+</html>

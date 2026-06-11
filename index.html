@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>夏威夷除蟲達人 — 餌站巡檢紀錄</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:sans-serif;background:#f0f4f8;color:#333;min-height:100vh}
+.header{background:#1F4E79;color:white;padding:20px 24px}
+.header h1{font-size:20px;font-weight:bold}
+.header p{font-size:13px;opacity:.75;margin-top:4px}
+.container{max-width:680px;margin:0 auto;padding:16px}
+.location-tag{background:#E6F1FB;color:#185FA5;font-size:14px;font-weight:bold;padding:8px 16px;border-radius:20px;display:inline-block;margin:14px 0 6px}
+.summary{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.summary-card{background:white;border-radius:10px;border:1px solid #e0e0e0;padding:12px 18px;flex:1;min-width:120px;text-align:center}
+.summary-card .num{font-size:26px;font-weight:bold;color:#1F4E79}
+.summary-card .lbl{font-size:12px;color:#888;margin-top:2px}
+.card{background:white;border-radius:10px;border:1px solid #e0e0e0;padding:16px;margin-bottom:12px}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.station-badge{background:#1F4E79;color:white;font-size:13px;font-weight:bold;padding:4px 12px;border-radius:6px}
+.date-text{font-size:13px;color:#888}
+.info-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:7px}
+.lbl{font-size:12px;color:#999;min-width:72px;padding-top:1px}
+.val{font-size:13px;color:#333}
+.status-normal{color:#2e7d32;font-weight:bold}
+.status-refill{color:#e65100;font-weight:bold}
+.status-abnormal{color:#c62828;font-weight:bold}
+.rat-none{color:#2e7d32}
+.rat-found{color:#c62828;font-weight:bold}
+.notes-box{background:#f9f9f9;border-radius:6px;padding:8px 12px;font-size:13px;color:#555;margin-top:8px;border-left:3px solid #ddd}
+.photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.photos img{width:100px;height:80px;object-fit:cover;border-radius:6px;border:1px solid #ddd;cursor:pointer}
+.loading{text-align:center;padding:60px 20px;color:#aaa;font-size:15px}
+.empty{text-align:center;padding:60px 20px;color:#bbb;font-size:15px}
+.error-msg{text-align:center;padding:40px 20px;color:#c62828;font-size:14px;background:white;border-radius:10px;margin-top:16px}
+.lightbox{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.88);z-index:999;align-items:center;justify-content:center}
+.lightbox.show{display:flex}
+.lightbox img{max-width:92%;max-height:92%;border-radius:8px}
+.footer{text-align:center;padding:24px 16px;font-size:12px;color:#aaa}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🐀 夏威夷除蟲達人</h1>
+  <p>餌站巡檢服務紀錄查詢</p>
+</div>
+<div class="container">
+  <div id="locationTag" class="location-tag">載入中...</div>
+  <div id="summary" class="summary" style="display:none"></div>
+  <div id="content" class="loading">資料載入中，請稍候...</div>
+</div>
+<div class="footer">夏威夷除蟲達人 ｜ 0908-959-655</div>
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('show')">
+  <img id="lightboxImg" src="" alt="現場照片">
+</div>
+<script>
+const APPS_SCRIPT_URL = "【填入你的Apps Script部署網址】";
+
+const params  = new URLSearchParams(location.search);
+const locCode = params.get("location") || "";
+
+function statusClass(s){
+  if(s==="正常") return "status-normal";
+  if(s.includes("補充")) return "status-refill";
+  return "status-abnormal";
+}
+function ratClass(s){ return s==="無"?"rat-none":"rat-found"; }
+function openPhoto(url){
+  document.getElementById("lightboxImg").src=url;
+  document.getElementById("lightbox").classList.add("show");
+}
+
+fetch(APPS_SCRIPT_URL+"?action=records&location="+encodeURIComponent(locCode))
+  .then(r=>r.json())
+  .then(res=>{
+    const tag = document.getElementById("locationTag");
+    const el  = document.getElementById("content");
+    const sum = document.getElementById("summary");
+
+    if(!res.ok){ tag.textContent="查詢失敗"; el.innerHTML='<div class="error-msg">'+res.msg+'</div>'; return; }
+
+    tag.textContent = "📍 " + (res.locationName || "未知地點");
+
+    const data = res.records;
+    if(!data.length){
+      el.innerHTML='<div class="empty">目前尚無巡檢紀錄</div>';
+      return;
+    }
+
+    // 摘要統計
+    const abnormal = data.filter(d=>d.baitStatus!=="正常"||d.ratSign!=="無").length;
+    sum.style.display="flex";
+    sum.innerHTML=`
+      <div class="summary-card"><div class="num">${data.length}</div><div class="lbl">巡檢總次數</div></div>
+      <div class="summary-card"><div class="num">${res.stationCount}</div><div class="lbl">餌站數量</div></div>
+      <div class="summary-card"><div class="num" style="color:${abnormal>0?'#c62828':'#2e7d32'}">${abnormal}</div><div class="lbl">異常紀錄</div></div>
+      <div class="summary-card"><div class="num" style="font-size:16px">${data[0].date}</div><div class="lbl">最近巡檢</div></div>
+    `;
+
+    el.innerHTML = data.map(d=>`
+      <div class="card">
+        <div class="card-header">
+          <span class="station-badge">${d.station}</span>
+          <span class="date-text">${d.date}</span>
+        </div>
+        <div class="info-row">
+          <span class="lbl">餌料狀況</span>
+          <span class="val ${statusClass(d.baitStatus)}">${d.baitStatus}</span>
+        </div>
+        <div class="info-row">
+          <span class="lbl">鼠跡發現</span>
+          <span class="val ${ratClass(d.ratSign)}">${d.ratSign}</span>
+        </div>
+        ${d.notes?`<div class="notes-box">📝 ${d.notes}</div>`:""}
+        ${d.photos&&d.photos.length?`
+          <div class="photos">
+            ${d.photos.map(p=>`<img src="${p}" onclick="openPhoto('${p}')" alt="現場照片">`).join("")}
+          </div>`:""}
+      </div>
+    `).join("");
+  })
+  .catch(()=>{
+    document.getElementById("locationTag").textContent="載入失敗";
+    document.getElementById("content").innerHTML='<div class="error-msg">無法連線，請稍後再試或聯絡夏威夷除蟲達人</div>';
+  });
+</script>
+</body>
+</html>
