@@ -308,15 +308,19 @@ async function submitForm() {
       photos:     photoData
     };
 
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(payload)
-    });
+    // 用 GET 請求送出（避開 CORS 問題）
+    const params = new URLSearchParams();
+    params.append("action", "submitRecord");
+    params.append("location", loc);
+    params.append("station", stat);
+    params.append("date", date);
+    params.append("baitStatus", selectedBait);
+    params.append("ratSign", selectedRat);
+    params.append("notes", notes);
+    params.append("photos", JSON.stringify(photoData));
 
-    // no-cors 模式無法讀取回傳值，直接視為成功
-    const data = { ok: true };
+    const res  = await fetch(APPS_SCRIPT_URL + "?" + params.toString());
+    const data = await res.json();
 
     lodEl.style.display = "none";
 
