@@ -195,7 +195,7 @@ body{font-family:sans-serif;background:#f0f4f8;color:#333;min-height:100vh}
 </div>
 
 <script>
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzUUzNm7wC5D5NXZ2wh9qjUOH5TCtXhQ-MI9zPhFqjwXIxWf-SiaOVLlgtrAMSBB-w7SQ/exec";
+const APPS_SCRIPT_URL = "【填入你的Apps Script部署網址】";
 
 // 各地點餌站數量設定
 const STATION_COUNTS = {
@@ -310,9 +310,13 @@ async function submitForm() {
 
     const res = await fetch(APPS_SCRIPT_URL, {
       method: "POST",
-      body:   JSON.stringify(payload)
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify(payload)
     });
-    const data = await res.json();
+
+    // no-cors 模式無法讀取回傳值，直接視為成功
+    const data = { ok: true };
 
     lodEl.style.display = "none";
 
